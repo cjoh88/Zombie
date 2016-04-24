@@ -1,0 +1,9 @@
+[package]
+name = "zombie"
+version = "0.1.0"
+authors = ["cjoh88 <cjoh193@gmail.com>"]
+
+[dependencies]
+rand = "*"
+sfml = "*"
+rustc-serialize = "*"
