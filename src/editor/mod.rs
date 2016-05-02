@@ -1,12 +1,12 @@
 pub mod input;
 pub mod world;
 
-use sfml::graphics::{RenderWindow, Color, RenderTarget, View};
-use sfml::window::{VideoMode, ContextSettings, window_style, event};
-use sfml::system::{Vector2f, Clock};
+use sfml::graphics::{RenderWindow, Color, RenderTarget};
+use sfml::window::{VideoMode, ContextSettings, window_style};
+use sfml::system::{Clock};
 
 use editor::world::World;
-use game::camera::Camera;
+//use game::camera::Camera;
 use editor::input::EditorInputHandler;
 
 pub struct Editor {

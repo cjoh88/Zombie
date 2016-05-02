@@ -5,44 +5,24 @@ use sfml::graphics::{Drawable, RenderStates, RenderTarget, RectangleShape, Color
 use rustc_serialize::json;
 use std::fs::File;
 use std::io::Read;
+use util::Vec2D;
 use util;
 //use self::util::*;
 use game::map_generator::TerrainGenerator;
 use std::slice::{Iter, IterMut};
 use std::ops::{Index, IndexMut};
 
-pub struct TileArray(Vec<u32>);
-
-impl TileArray {
-	pub fn new() -> Self {
-		TileArray(Vec::new())
-	}
-
-	pub fn with_capacity(capacity: usize) -> Self {
-		TileArray(Vec::with_capacity(capacity))
-	}
-
-	pub fn iter(&self) -> Iter<u32> {
-		self.iter()
-	}
-
-	pub fn iter_mut(&mut self) -> IterMut<u32> {
-		self.iter_mut()
-	}
-}
-
-
-
+//TODO Separate Layer into Layer and LayerRenderer
 pub struct Layer {
 	vertices: VertexArray,
 	texture: Texture,
-	tiles: Vec<u32>,
+	tiles: Vec2D<u32>,
 }
 
 impl Layer {
 	//TODO Use Map settings struct instead of several parameters
-	pub fn new(width: usize, height: usize, tiles: Vec<u32>) -> Self {
-		let size = width * height;
+	pub fn new(tiles: Vec2D<u32>) -> Self {
+		let size = tiles.len();
 		let texture = Texture::new_from_file("assets/tileset.png").expect("Could not load tileset");
 		//let tiles = vec![0; size];		//TODO Load from file
 		let mut vertices = VertexArray::new_init(Quads, size as u32 * 4).expect("Could not create VertexArray");
@@ -51,8 +31,8 @@ impl Layer {
 			//let ty = ((*tile * 64) / 640) as f32;
 			let (tx0, ty0, tx1, ty1) = util::get_tile_texture_coords(*tile);
 
-			let px = (i % width) as f32;
-			let py = (i / width) as f32;
+			let px = (i % tiles.width()) as f32;
+			let py = (i / tiles.width()) as f32;
 
 			let j = i as u32;
 			vertices.get_vertex(j * 4).0.position = Vector2f::new(px, py);
@@ -105,7 +85,9 @@ impl Map {
 			layer: {
 				//let x = TerrainGenerator::new_from_seed(&[1,2,3,4], 128,128);
 				let x = TerrainGenerator::new_from_seed(&[5,6,7,8], 128,128);
-				[x, Layer::new(width, height, vec![0; width*height]), Layer::new(width, height, vec![0; width*height])]
+				[x, 
+				Layer::new(Vec2D::from_vec(width, height, vec![0; width*height])),
+				Layer::new(Vec2D::from_vec(width, height, vec![0; width*height]))]
 			},
 		}
 	}
@@ -114,7 +96,9 @@ impl Map {
 		Map {
 			width: width,
 			height: height,
-			layer: [Layer::new(width, height, l0),Layer::new(width, height, l1),Layer::new(width, height, l2)],
+			layer: [Layer::new(Vec2D::from_vec(width, height, vec![0; width*height])), 
+				Layer::new(Vec2D::from_vec(width, height, vec![0; width*height])), 
+				Layer::new(Vec2D::from_vec(width, height, vec![0; width*height]))],
 		}
 	}
 
@@ -135,6 +119,7 @@ impl Drawable for Map {
 		render_target.draw(&self.layer[2]);
 	}
 }
+
 
 #[derive(RustcDecodable, RustcEncodable)]
 pub struct MapLoader {
@@ -177,3 +162,58 @@ impl MapLoader {
 		Map::new_init(decoded.width as usize, decoded.height as usize, decoded.layer0, decoded.layer1, decoded.layer2)
 	}
 }
+
+pub struct CollisionLayer {
+	left_right: Vec2D<bool>,
+	top_bottom: Vec2D<bool>,
+}
+
+impl CollisionLayer {
+	pub fn new(width: usize, height: usize) -> Self {
+		CollisionLayer {
+			left_right: Vec2D::new(width + 1, height),
+			top_bottom: Vec2D::new(width, height + 1),
+		}
+	}
+
+	pub fn set_collision_right(&mut self, x: usize, y: usize) {
+		self.left_right[(x+1, y)] = true;
+	}
+
+	pub fn set_collision_left(&mut self, x: usize, y: usize) {
+		self.left_right[(x,y)] = true;
+	}
+
+	pub fn set_collision_top(&mut self, x: usize, y: usize) {
+		self.top_bottom[(x, y)] = true;
+	}
+
+	pub fn set_collision_bottom(&mut self, x: usize, y: usize) {
+		self.top_bottom[(x,y+1)] = true;
+	}
+
+	pub fn can_walk_right(&self, x: usize, y: usize) -> bool {
+		self.left_right[(x+1,y)]
+	}
+
+	pub fn can_walk_left(&self, x: usize, y: usize) -> bool {
+		self.left_right[(x,y)]
+	}
+
+	pub fn can_walk_up(&self, x: usize, y: usize) -> bool {
+		self.top_bottom[(x,y)]
+	}
+
+	pub fn can_walk_down(&self, x: usize, y: usize) -> bool {
+		self.top_bottom[(x,y+1)]
+	}
+
+	pub fn width(&self) -> usize {
+		self.width()
+	}
+
+	pub fn height(&self) -> usize {
+		self.height()
+	}
+}
+

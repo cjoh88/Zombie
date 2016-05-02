@@ -1,7 +1,7 @@
 use game::camera::Camera;
 use game::map::{Map, Layer, MapLoader};
 use sfml::graphics::{Drawable, RenderStates, RenderTarget, RectangleShape, Color};
-use sfml::system::{Vector2f};
+//use sfml::system::{Vector2f};
 use game::map_generator::{Noise, NoiseRenderer};
 
 pub struct World {

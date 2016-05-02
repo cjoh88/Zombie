@@ -1,12 +1,13 @@
 
-use game::map::{Map, Layer};
+use game::map::{Map, Layer, CollisionLayer};
 use rand::{Rng, SeedableRng, StdRng};
 use std::ops::{Index, IndexMut};
 use std::slice::{Iter, IterMut};
-use sfml::system::{Vector2f};
+use sfml::system::{Vector2f, Vector2u};
 //use sfml::graphics::*;
-use sfml::graphics::{Drawable, RenderStates, RenderTarget, RectangleShape, Color, VertexArray, Texture, Quads};
+use sfml::graphics::{Drawable, RenderStates, RenderTarget, RectangleShape, Color, VertexArray, Texture, Quads, IntRect};
 use util;
+use util::Vec2D;
 
 pub struct MapGenerator {
 	rng: StdRng,
@@ -26,73 +27,25 @@ impl MapGenerator {
 	pub fn next_f32(&mut self) -> f32 {
 		self.rng.gen::<f32>()
 	}
-
-	pub fn generate_white_noise(&mut self, width: usize, height: usize) -> Vec<f32> {
-		let mut noise: Vec<f32> = Vec::with_capacity(width * height);
-		for i in 0..(width * height) {
-			noise.push(self.next_f32());
-		}
-		noise
-	}
-
-	pub fn generate_smooth_noise(&mut self, width: usize, height: usize, octave: usize) {
-		let mut smooth_noise: Vec<f32> = Vec::with_capacity(width * height);
-		let base_noise = self.generate_white_noise(width, height);
-		let sample_period = 1 << octave;	// = 2^octave
-		let sample_frequency =  1f32 / sample_period as f32;
-		for x in 0..width {
-			let sample_x0 = (x / sample_period) * sample_period;
-			let sample_x1 = (sample_x0 + sample_period) % width;
-			let horizontal_blend = (x - sample_x0) as f32 * sample_frequency;
-			for y in 0..height {
-				let sample_y0 = (y / sample_period) * sample_period;
-				let sample_y1 = (sample_y0 + sample_period) % height;
-				let vertical_blend = (y - sample_y0) as f32 * sample_frequency;
-
-				let top = Self::interpolate(base_noise[sample_y0 * width + sample_x0], base_noise[sample_y0 * width + sample_x1], horizontal_blend);
-			}
-		}
-	}
-
-	pub fn interpolate(x0: f32, x1: f32, alpha: f32) -> f32 {
-		x0 * (1f32 - alpha) + alpha * x1
-	}
 }
 
-pub struct Noise {
-	vec: Vec<f32>,
-	width: usize,
-	height: usize,
-}
+pub struct Noise(Vec2D<f32>);
 
 impl Noise {
 	fn new(width: usize, height: usize) -> Self {
-		Noise {
-			vec: vec![0f32; width * height],
-			width: width,
-			height: height,
-		}
+		Noise(Vec2D::from_vec(width, height, vec![0f32; width * height]))
 	}
 
 	pub fn new_white_from_seed(seed: &[usize], width: usize, height: usize) -> Self {
 		let mut rng: StdRng = SeedableRng::from_seed(seed);
-		Noise {
-			vec: {
-				let mut noise: Vec<f32> = Vec::with_capacity(width * height);
-				for i in 0..(width * height) {
-					noise.push(rng.gen::<f32>());
-				}
-				noise
-			},
-			width: width,
-			height: height,
+		let mut vec: Vec<f32> = Vec::with_capacity(width * height);
+		for i in 0..(width * height) {
+					vec.push(rng.gen::<f32>());
 		}
+		Noise(Vec2D::from_vec(width, height, vec))
 	}
 
 	pub fn new_smooth_from_seed(seed: &[usize], width: usize, height: usize, octave: usize) -> Self {
-		//let mut rng: StdRng = SeedableRng::from_seed(seed);
-		//let new_seed = &[rng.gen::<usize>(),rng.gen::<usize>(),rng.gen::<usize>(),rng.gen::<usize>()];
-		//let base_noise = Noise::new_white_from_seed(&[1,2,3,4], width, height);
 		let base_noise = Noise::new_white_from_seed(seed, width, height);
 		let mut smooth_noise = Noise::new(width, height);
 		let sample_period = 1 << octave;
@@ -115,16 +68,16 @@ impl Noise {
 	}
 
 	pub fn new_smooth_from_white(base_noise: &Noise, octave: usize) -> Self {
-		let mut smooth_noise = Noise::new(base_noise.width, base_noise.height);
+		let mut smooth_noise = Noise::new(base_noise.width(), base_noise.height());
 		let sample_period = 1 << octave;
 		let sample_frequency = 1f32 / sample_period as f32;
-		for x in 0..base_noise.width {
+		for x in 0..base_noise.width() {
 			let x0 = (x / sample_period) * sample_period;
-			let x1 = (x0 + sample_period) % base_noise.width;
+			let x1 = (x0 + sample_period) % base_noise.width();
 			let horizontal_blend = (x - x0) as f32 * sample_frequency;
-			for y in 0..base_noise.height {
+			for y in 0..base_noise.height() {
 				let y0 = (y / sample_period) * sample_period;
-				let y1 = (y0 + sample_period) % base_noise.height;
+				let y1 = (y0 + sample_period) % base_noise.height();
 				let vertical_blend = (y - y0) as f32 * sample_frequency;
 
 				let top = Self::interpolate(base_noise[(x0,y0)], base_noise[(x1,y0)], horizontal_blend);
@@ -172,32 +125,36 @@ impl Noise {
 	}
 
 	pub fn iter(&self) -> Iter<f32> {
-		self.vec.iter()
+		self.0.iter()
 	}
 
 	pub fn iter_mut(&mut self) -> IterMut<f32> {
-		self.vec.iter_mut()
+		self.0.iter_mut()
 	}
 
 	pub fn width(&self) -> usize {
-		self.width
+		self.0.width()
 	}
 
 	pub fn height(&self) -> usize {
-		self.height
+		self.0.height()
+	}
+
+	pub fn len(&self) -> usize {
+		self.0.len()
 	}
 }
 
 impl Index<(usize, usize)> for Noise {
 	type Output = f32;
-	fn index(&self, (x,y): (usize, usize)) -> &f32 {
-		&self.vec[y * self.width + x]
+	fn index(&self, p: (usize, usize)) -> &f32 {
+		&self.0[p]
 	}
 }
 
 impl IndexMut<(usize, usize)> for Noise {
-	fn index_mut(&mut self, (x,y): (usize, usize)) -> &mut f32 {
-		&mut self.vec[y * self.width + x]
+	fn index_mut(&mut self, p: (usize, usize)) -> &mut f32 {
+		&mut self.0[p]
 	}
 }
 
@@ -207,12 +164,12 @@ pub struct NoiseRenderer {
 
 impl NoiseRenderer {
 	pub fn new(noise: &Noise) -> Self {
-		let size = noise.width() * noise.height();
+		let size = noise.len();
 		let mut vertices = VertexArray::new_init(Quads, size as u32 * 4).expect("Could not create VertexArray");
 		for (i, x) in noise.iter().enumerate() {
 
-			let px = (i % noise.width) as f32;
-			let py = (i / noise.width) as f32;
+			let px = (i % noise.width()) as f32;
+			let py = (i / noise.width()) as f32;
 
 			let j = i as u32;
 			vertices.get_vertex(j * 4).0.position = Vector2f::new(px, py);
@@ -261,7 +218,8 @@ pub struct TerrainGenerator {
 impl TerrainGenerator {
 	pub fn new_from_seed(seed: &[usize], width: usize, height: usize) -> Layer {
 		let noise = Noise::new_perlin_from_seed(seed, width, height, oct, per);
-		let mut tiles: Vec<u32> = Vec::with_capacity(width * height);
+		//let mut tiles: Vec<u32> = Vec::with_capacity(width * height);
+		let mut tiles: Vec2D<u32> = Vec2D::new(width, height);
 		for n in noise.iter() {
 			let mut x = match *n {
 				b if b < 0.05 => Snow,
@@ -270,36 +228,57 @@ impl TerrainGenerator {
 				b if b < 0.65 => Forest,
 				_ => DeepWater,
 			};
-			tiles.push(x);
+			(*tiles).push(x);
 		}
 		let mut t = Self::smooth_terrain(&tiles);
 		for _ in 0..0 {
 			t = Self::smooth_terrain(&t);
 		}
-		Layer::new(width, height, t)
+		//t[(0,0)] = Sand;
+		Layer::new(t)
 	}
 
-	fn smooth_terrain(tiles: &Vec<u32>) -> Vec<u32> {
-		let mut new: Vec<u32> = Vec::with_capacity(tiles.len());
+	fn smooth_terrain(tiles: &Vec2D<u32>) -> Vec2D<u32> {
+		let mut new: Vec2D<u32> = Vec2D::new(tiles.width(), tiles.height());
 		//let (x, y) = util::itoc(3+ 256, 128);
 		//let i = util::ctoi(x,y,128);
 		//println!("{}, {} = {}", x, y, i);
 		for (i, tile) in tiles.iter().enumerate() {
 			let (x,y) = util::itoc(i, 128);
 			if x > 0 && x < 127 && y > 0 && y < 127 {
-				new.push(Self::smooth_tile(
-					tiles[i],
-					tiles[util::ctoi(x,y+1,128)],
-					tiles[util::ctoi(x+1,y,128)],
-					tiles[util::ctoi(x+1,y+1,128)],
-					tiles[util::ctoi(x+1,y,128)],
+				(*new).push(Self::smooth_tile(
+					tiles[(x,y)],
+					tiles[(x,y+1)],
+					tiles[(x+1,y)],
+					tiles[(x,y-1)],
+					tiles[(x-1,y)],
 				));
 			}
 			else {
-				new.push(tiles[i]);
+				(*new).push(tiles[(x,y)]);
 			}
 		}
+		//TODO fix this, this is just for testing
+		Self::add_roads(&mut new);
 		new
+	}
+
+	fn add_roads(tiles: &mut Vec2D<u32>) {
+		let mut road_generator = RoadGenerator::new(&[1,2,3,4], 128, 128, 5);	//TODO Change seed
+		road_generator.generate();
+		//road_generator.print_roads();
+		for road in road_generator.roads.iter() {
+			if road.x1 == road.x2 {		// if vertical
+				for y in road.y1..road.y2 {
+					tiles[(road.x1, y)] = Road;
+				}
+			}
+			else {	// if horizontal
+				for x in road.x1..road.x2 {
+					tiles[(x, road.y1)] = Road;
+				}
+			}
+		}
 	}
 
 	//TODO Do something about this.... OMFG
@@ -357,5 +336,152 @@ impl TerrainGenerator {
 			return left;
 		}
 		return curr;
+	}
+}
+
+struct Rect {
+	x1: usize,
+	y1: usize,
+	x2: usize,
+	y2: usize,
+}
+
+impl Rect {
+	fn new(x1: usize, y1: usize, x2: usize, y2: usize) -> Self {
+		Rect {
+			x1: x1,
+			y1: y1,
+			x2: x2,
+			y2: y2,
+		}
+	}
+
+	fn width(&self) -> usize {
+		self.x2 - self.x1
+	}
+
+	fn height(&self) -> usize {
+		self.y2 - self.y1
+	}
+
+	fn split_vertical(&self, x: usize) -> (Rect, Rect) {
+		let left = Rect {
+			x1: self.x1,
+			y1: self.y1,
+			x2: self.x1+x,
+			y2: self.y2,
+		};
+		let right = Rect {
+			x1: self.x1+x+1,
+			y1: self.y1,
+			x2: self.x2,
+			y2: self.y2,
+		};
+		(left, right)
+	}
+
+	fn split_horizontal(&self, y: usize) -> (Rect, Rect) {
+		let top = Rect {
+			x1: self.x1,
+			y1: self.y1,
+			x2: self.x2,
+			y2: self.y1+y,
+		};
+		let bottom = Rect {
+			x1: self.x1,
+			y1: self.y1+y+1,
+			x2: self.x2,
+			y2: self.y2,
+		};
+		(top, bottom)
+	}
+
+	fn print(&self) {
+		println!("{}, {}, {}, {}", self.x1, self.y1, self.x2, self.y2);
+	}
+}
+
+pub struct RoadGenerator {
+	width: usize,
+	height: usize,
+	rng: StdRng,
+	roads: Vec<Rect>,
+	splits: usize,
+}
+
+impl RoadGenerator {
+	pub fn new(seed: &[usize], width: usize, height: usize, splits: usize) -> Self {
+		RoadGenerator {
+			width: width,
+			height: height,
+			rng: SeedableRng::from_seed(seed),
+			roads: Vec::new(),
+			splits: splits,
+		}
+	}
+
+	//TODO Don't generate roads of length 0
+	pub fn generate(&mut self) {
+		let size_limit: usize = 12; // min size of a split
+		//TODO empty roads
+		let mut process_list: Vec<(bool, Rect)> = Vec::new();
+		process_list.push((self.rng.gen::<bool>(), Rect{x1: 0, y1: 0, x2: self.width, y2: self.height}));
+		while !process_list.is_empty() {
+			let (vertical, rect) = process_list.pop().expect("Could not pop vector");
+			if vertical && rect.width() >= size_limit {
+				let mut x = self.rng.gen::<usize>() % (rect.width()-8) + 4 as usize;
+				let (left, right): (Rect, Rect) = rect.split_vertical(x);
+				process_list.push((false, left));
+				process_list.push((false, right));
+				self.roads.push(Rect::new(rect.x1+x, rect.y1, rect.x1+x, rect.y2));
+			}
+			else if rect.height() >= size_limit {
+				let mut y = self.rng.gen::<usize>() % (rect.height()-8) + 4 as usize;
+				let (top, bottom): (Rect, Rect) = rect.split_horizontal(y);
+				process_list.push((true, top));
+				process_list.push((true, bottom));
+				self.roads.push(Rect::new(rect.x1, rect.y1+y, rect.x2, rect.y1+y));
+			}
+		}
+	}
+
+	pub fn print_roads(&self) {
+		for road in self.roads.iter() {
+			if road.x1 == road.x2 {
+				println!("vertical  ({}): {},{}", road.x1, road.y1, road.y2);
+			}
+			else {
+				println!("horizontal({}): {}, {}", road.y1,road.x1, road.x2);
+			}
+		}
+	}
+}	
+
+pub struct Building {
+	position: Vector2u,
+	tiles: Vec2D<u32>,	
+	collision: CollisionLayer,	
+}
+
+impl Building {
+	pub fn new(x: u32, y: u32, width: usize, height: usize) -> Self {
+		let mut tiles: Vec<u32> = Vec::with_capacity(width * height);
+		for _ in 0..(width * height) {
+			tiles.push(Building);
+		}
+		let mut collision = CollisionLayer::new(width, height);
+		for x in 0..width {
+			collision.set_collision_top(x,0);
+			collision.set_collision_bottom(x, height);
+		}
+		for y in 0..height {
+			collision.set_collision_left(0,y);
+			collision.set_collision_right(width, y);
+		}
+		Building {
+			position: Vector2u::new(x,y),
+			tiles: Vec2D::from_vec(width, height, tiles),
+			collision: collision,
+		}
 	}
 }

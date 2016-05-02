@@ -44,8 +44,8 @@ impl PlayerInputHandler {
         match code {
             Key::Right | Key::Left | Key::D | Key::A => world.get_mut_camera().stop_horizontal(),
             Key::Up | Key::Down | Key::W | Key::S    => world.get_mut_camera().stop_vertical(),
-            Key::Add               => world.get_mut_camera().zoom(0.5),
-            Key::Subtract          => world.get_mut_camera().zoom(2.0),
+            Key::Add | Key::E              => world.get_mut_camera().zoom(0.5),
+            Key::Subtract | Key::Q          => world.get_mut_camera().zoom(2.0),
             _ => ()
         }
     }

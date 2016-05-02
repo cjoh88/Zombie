@@ -9,29 +9,19 @@ mod util;
 use game::Game;
 use editor::Editor;
 
-use game::map::MapLoader;
-use game::map_generator::MapGenerator;
+//use game::map::MapLoader;
+//use game::map_generator::MapGenerator;
+use game::map_generator::RoadGenerator;
 
-use util::Vec2D;
+//use util::Vec2D;
 
-fn test1(x: &Vec2D<u32>) {
-	println!("{}, {}", x[(0,0)], x[(1,0)]);
-}
 
-fn test2(x: &Vec<u32>) {
-	println!("{}, {}", x[0], x[1]);
-}
 
 fn main() {
 
-	let x: Vec2D<u32> = {
-		let mut y =	Vec2D::new(2,1);
-		(*y).push(3);
-		(*y).push(4);
-		y
-	};
-	test1(&x);
-	test2(&x);
+	let mut x = RoadGenerator::new(&[1,2,3,4], 10, 10, 3);
+	x.generate();
+	//x.print_roads();
 
 	/*for c in CoordIterator::new(10,5) {
 		println!("{}, {}", c.0, c.1);
